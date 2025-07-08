@@ -36,9 +36,7 @@ def create_tables():
         patient_id INTEGER NOT NULL,
         doctor_id INTEGER NOT NULL,
         time TEXT NOT NULL,
-        status TEXT NOT NULL,
-        FOREIGN KEY(patient_id) REFERENCES patients(id),
-        FOREIGN KEY(doctor_id) REFERENCES doctors(id)
+        status TEXT NOT NULL
     )''')
 
     c.execute('''CREATE TABLE IF NOT EXISTS prescriptions (
@@ -47,9 +45,7 @@ def create_tables():
         doctor_id INTEGER NOT NULL,
         medication TEXT NOT NULL,
         prescribed_on TEXT NOT NULL,
-        refill_due TEXT NOT NULL,
-        FOREIGN KEY(patient_id) REFERENCES patients(id),
-        FOREIGN KEY(doctor_id) REFERENCES doctors(id)
+        refill_due TEXT NOT NULL
     )''')
 
     c.execute('''CREATE TABLE IF NOT EXISTS complaints (
@@ -57,8 +53,7 @@ def create_tables():
         patient_id INTEGER NOT NULL,
         content TEXT NOT NULL,
         submitted_on TEXT NOT NULL,
-        status TEXT NOT NULL,
-        FOREIGN KEY(patient_id) REFERENCES patients(id)
+        status TEXT NOT NULL
     )''')
     conn.commit()
 
@@ -101,33 +96,32 @@ def patient_register():
     password = st.text_input("Password", type="password")
 
     if st.button("Register"):
-        if not name.strip():
-            st.error("Full Name cannot be empty.")
-            return
-        if not id_number.strip():
-            st.error("ID Number cannot be empty.")
+        if not name.strip() or not id_number.strip() or not password.strip():
+            st.error("All fields are required.")
             return
         if not password_policy(password):
-            st.error("Password must have at least 6 characters, a number and a special character.")
+            st.error("Password must have at least 6 characters, a number, and a special character.")
             return
         hashed = hash_password(password)
         try:
-            c.execute("INSERT INTO patients (full_name, dob, id_number, language, password_hash) VALUES (?, ?, ?, ?, ?)",
-                      (name.strip(), dob.isoformat(), id_number.strip(), language, hashed))
+            c.execute(
+                "INSERT INTO patients (full_name, dob, id_number, language, password_hash) VALUES (?, ?, ?, ?, ?)",
+                (name.strip(), dob.isoformat(), id_number.strip(), language, hashed)
+            )
             conn.commit()
             st.success("Patient registered successfully!")
         except sqlite3.IntegrityError:
-            st.error("ID Number already registered. Please log in or use a different ID.")
+            st.error("ID Number already registered. Please log in instead.")
         except Exception as e:
-            st.error(f"Unexpected error: {e}")
+            st.error(f"Database error: {e}")
 
 def patient_login():
     st.title("Patient Login")
     id_number = st.text_input("ID Number")
     password = st.text_input("Password", type="password")
     if st.button("Login"):
-        if not id_number.strip():
-            st.error("Please enter your ID Number.")
+        if not id_number.strip() or not password.strip():
+            st.error("All fields are required.")
             return
         c.execute("SELECT id, full_name, password_hash FROM patients WHERE id_number=?", (id_number.strip(),))
         data = c.fetchone()
@@ -135,9 +129,9 @@ def patient_login():
             st.session_state.user_role = "patient"
             st.session_state.user_id = data[0]
             st.session_state.user_name = data[1]
-            st.experimental_rerun()
+            st.rerun()
         else:
-            st.error("Invalid credentials.")
+            st.error("Invalid ID Number or password.")
 
 def doctor_register():
     st.title("Doctor Registration")
@@ -148,39 +142,35 @@ def doctor_register():
     password = st.text_input("Password", type="password")
 
     if st.button("Register"):
-        if not first_name.strip():
-            st.error("First Name cannot be empty.")
-            return
-        if not surname.strip():
-            st.error("Surname cannot be empty.")
-            return
-        if not work.strip():
-            st.error("Place of Work cannot be empty.")
+        if not first_name.strip() or not surname.strip() or not work.strip() or not practice.strip() or not password.strip():
+            st.error("All fields are required.")
             return
         if len(practice.strip()) != 13 or not practice.strip().isdigit():
-            st.error("Practice number must be exactly 13 digits.")
+            st.error("Practice Number must be exactly 13 digits.")
             return
         if not password_policy(password):
-            st.error("Password must have at least 6 characters, a number and a special character.")
+            st.error("Password must have at least 6 characters, a number, and a special character.")
             return
         hashed = hash_password(password)
         try:
-            c.execute("INSERT INTO doctors (first_name, surname, place_of_work, practice_number, password_hash) VALUES (?, ?, ?, ?, ?)",
-                      (first_name.strip(), surname.strip(), work.strip(), practice.strip(), hashed))
+            c.execute(
+                "INSERT INTO doctors (first_name, surname, place_of_work, practice_number, password_hash) VALUES (?, ?, ?, ?, ?)",
+                (first_name.strip(), surname.strip(), work.strip(), practice.strip(), hashed)
+            )
             conn.commit()
             st.success("Doctor registered successfully!")
         except sqlite3.IntegrityError:
-            st.error("Practice Number already registered. Please log in or use a different number.")
+            st.error("Practice Number already registered. Please log in instead.")
         except Exception as e:
-            st.error(f"Unexpected error: {e}")
+            st.error(f"Database error: {e}")
 
 def doctor_login():
     st.title("Doctor Login")
     practice = st.text_input("Practice Number")
     password = st.text_input("Password", type="password")
     if st.button("Login"):
-        if not practice.strip():
-            st.error("Please enter your Practice Number.")
+        if not practice.strip() or not password.strip():
+            st.error("All fields are required.")
             return
         c.execute("SELECT id, first_name, password_hash FROM doctors WHERE practice_number=?", (practice.strip(),))
         data = c.fetchone()
@@ -188,9 +178,9 @@ def doctor_login():
             st.session_state.user_role = "doctor"
             st.session_state.user_id = data[0]
             st.session_state.user_name = data[1]
-            st.experimental_rerun()
+            st.rerun()
         else:
-            st.error("Invalid credentials.")
+            st.error("Invalid Practice Number or password.")
 
 def patient_dashboard():
     st.title(f"Welcome, {st.session_state.user_name}")
@@ -198,7 +188,7 @@ def patient_dashboard():
     st.subheader("Book Appointment")
     doctors = get_doctors()
     if not doctors:
-        st.warning("No doctors available at the moment.")
+        st.warning("No doctors available.")
         return
 
     options = [f"{doc[0]} - Dr. {doc[1]} {doc[2]} ({doc[3]})" for doc in doctors]
@@ -207,32 +197,41 @@ def patient_dashboard():
     time = st.time_input("Time")
     dt = datetime.combine(date, time)
 
-    if st.button("Book"):
+    if st.button("Book Appointment"):
         doc_id = int(doctor.split(" - ")[0])
         try:
-            c.execute("INSERT INTO appointments (patient_id, doctor_id, time, status) VALUES (?, ?, ?, ?)",
-                      (st.session_state.user_id, doc_id, dt.isoformat(), "Scheduled"))
+            c.execute(
+                "INSERT INTO appointments (patient_id, doctor_id, time, status) VALUES (?, ?, ?, ?)",
+                (st.session_state.user_id, doc_id, dt.isoformat(), "Scheduled")
+            )
             conn.commit()
             st.success("Appointment booked!")
         except Exception as e:
-            st.error(f"Could not book appointment: {e}")
+            st.error(f"Error booking appointment: {e}")
 
     st.subheader("My Appointments")
-    c.execute('''SELECT a.time, d.first_name, d.surname FROM appointments a 
-                 JOIN doctors d ON a.doctor_id = d.id WHERE a.patient_id=? ORDER BY a.time DESC''',
-              (st.session_state.user_id,))
-    appointments = c.fetchall()
-    if appointments:
-        for row in appointments:
+    c.execute('''
+        SELECT a.time, d.first_name, d.surname 
+        FROM appointments a
+        JOIN doctors d ON a.doctor_id = d.id
+        WHERE a.patient_id=?
+        ORDER BY a.time DESC
+    ''', (st.session_state.user_id,))
+    rows = c.fetchall()
+    if rows:
+        for row in rows:
             st.info(f"Doctor: Dr. {row[1]} {row[2]} | Time: {row[0]}")
     else:
-        st.write("No appointments booked yet.")
+        st.write("No appointments yet.")
 
     st.subheader("My Prescriptions")
-    c.execute("SELECT medication, prescribed_on, refill_due FROM prescriptions WHERE patient_id=? ORDER BY prescribed_on DESC", (st.session_state.user_id,))
-    prescriptions = c.fetchall()
-    if prescriptions:
-        for med in prescriptions:
+    c.execute(
+        "SELECT medication, prescribed_on, refill_due FROM prescriptions WHERE patient_id=? ORDER BY prescribed_on DESC",
+        (st.session_state.user_id,)
+    )
+    meds = c.fetchall()
+    if meds:
+        for med in meds:
             st.success(f"{med[0]} | Prescribed: {med[1]} | Refill Due: {med[2]}")
     else:
         st.write("No prescriptions yet.")
@@ -240,38 +239,41 @@ def patient_dashboard():
 def doctor_dashboard():
     st.title(f"Doctor Dashboard - Dr. {st.session_state.user_name}")
 
-    c.execute('''SELECT a.id, p.id, p.full_name, a.time FROM appointments a 
-                 JOIN patients p ON a.patient_id = p.id WHERE a.doctor_id=? ORDER BY a.time DESC''',
-              (st.session_state.user_id,))
+    c.execute('''
+        SELECT a.id, p.id, p.full_name, a.time
+        FROM appointments a
+        JOIN patients p ON a.patient_id = p.id
+        WHERE a.doctor_id=?
+        ORDER BY a.time DESC
+    ''', (st.session_state.user_id,))
     appointments = c.fetchall()
     if not appointments:
         st.write("No appointments scheduled.")
         return
 
-    for row in appointments:
-        appointment_id = row[0]
-        patient_id = row[1]
-        patient_name = row[2]
-        appointment_time = row[3]
-
+    for appt in appointments:
+        appointment_id, patient_id, patient_name, appointment_time = appt
         st.info(f"Patient: {patient_name} | Time: {appointment_time}")
-        med_key = f"med_{appointment_id}"
-        med = st.text_input(f"Prescription for {patient_name} at {appointment_time}", key=med_key)
 
-        presc_btn_key = f"btn_{appointment_id}"
-        if st.button("Prescribe", key=presc_btn_key):
-            if not med.strip():
+        prescription_key = f"med_{appointment_id}"
+        medication = st.text_input(f"Prescription for {patient_name}", key=prescription_key)
+
+        prescribe_button_key = f"btn_{appointment_id}"
+        if st.button("Prescribe", key=prescribe_button_key):
+            if not medication.strip():
                 st.error("Please enter medication name before prescribing.")
                 continue
             today = datetime.now().date().isoformat()
-            refill = (datetime.now() + timedelta(days=30)).date().isoformat()
+            refill_due = (datetime.now() + timedelta(days=30)).date().isoformat()
             try:
-                c.execute("INSERT INTO prescriptions (patient_id, doctor_id, medication, prescribed_on, refill_due) VALUES (?, ?, ?, ?, ?)",
-                          (patient_id, st.session_state.user_id, med.strip(), today, refill))
+                c.execute(
+                    "INSERT INTO prescriptions (patient_id, doctor_id, medication, prescribed_on, refill_due) VALUES (?, ?, ?, ?, ?)",
+                    (patient_id, st.session_state.user_id, medication.strip(), today, refill_due)
+                )
                 conn.commit()
-                st.success("Medication prescribed.")
+                st.success(f"Prescription for {patient_name} saved!")
             except Exception as e:
-                st.error(f"Error prescribing medication: {e}")
+                st.error(f"Error saving prescription: {e}")
 
 # =========================
 # MAIN
@@ -301,4 +303,4 @@ else:
 
     if st.sidebar.button("Logout"):
         st.session_state.clear()
-        st.experimental_rerun()
+        st.rerun()
