@@ -4,6 +4,37 @@ import hashlib
 from datetime import datetime, timedelta
 
 # =========================
+# PAGE CONFIG
+# =========================
+st.set_page_config(
+    page_title="The Health Line",
+    page_icon="🩺",
+    layout="centered"
+)
+
+# =========================
+# STYLE / CSS
+# =========================
+st.markdown(
+    """
+    <style>
+    .big-title {
+        font-size: 3em;
+        color: #7a0014;
+        text-align: center;
+        margin-bottom: 20px;
+    }
+    .subtitle {
+        font-size: 1.5em;
+        margin-top: 20px;
+        margin-bottom: 10px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+# =========================
 # DATABASE CONNECTION
 # =========================
 conn = sqlite3.connect('queue_system.db', check_same_thread=False)
@@ -88,7 +119,8 @@ def get_doctors():
 # PAGES
 # =========================
 def patient_register():
-    st.title("Patient Registration")
+    st.markdown('<div class="big-title">🩺 Patient Registration</div>', unsafe_allow_html=True)
+    st.divider()
     name = st.text_input("Full Name")
     dob = st.date_input("Date of Birth", min_value=datetime(1910, 1, 1).date(), max_value=datetime.today().date())
     id_number = st.text_input("ID Number")
@@ -109,14 +141,15 @@ def patient_register():
                 (name.strip(), dob.isoformat(), id_number.strip(), language, hashed)
             )
             conn.commit()
-            st.success("Patient registered successfully!")
+            st.success("✅ Patient registered successfully!")
         except sqlite3.IntegrityError:
-            st.error("ID Number already registered. Please log in instead.")
+            st.error("❌ ID Number already registered. Please log in instead.")
         except Exception as e:
             st.error(f"Database error: {e}")
 
 def patient_login():
-    st.title("Patient Login")
+    st.markdown('<div class="big-title">🩺 Patient Login</div>', unsafe_allow_html=True)
+    st.divider()
     id_number = st.text_input("ID Number")
     password = st.text_input("Password", type="password")
     if st.button("Login"):
@@ -131,10 +164,11 @@ def patient_login():
             st.session_state.user_name = data[1]
             st.rerun()
         else:
-            st.error("Invalid ID Number or password.")
+            st.error("❌ Invalid ID Number or password.")
 
 def doctor_register():
-    st.title("Doctor Registration")
+    st.markdown('<div class="big-title">🩺 Doctor Registration</div>', unsafe_allow_html=True)
+    st.divider()
     first_name = st.text_input("First Name")
     surname = st.text_input("Surname")
     work = st.text_input("Place of Work")
@@ -158,14 +192,15 @@ def doctor_register():
                 (first_name.strip(), surname.strip(), work.strip(), practice.strip(), hashed)
             )
             conn.commit()
-            st.success("Doctor registered successfully!")
+            st.success("✅ Doctor registered successfully!")
         except sqlite3.IntegrityError:
-            st.error("Practice Number already registered. Please log in instead.")
+            st.error("❌ Practice Number already registered. Please log in instead.")
         except Exception as e:
             st.error(f"Database error: {e}")
 
 def doctor_login():
-    st.title("Doctor Login")
+    st.markdown('<div class="big-title">🩺 Doctor Login</div>', unsafe_allow_html=True)
+    st.divider()
     practice = st.text_input("Practice Number")
     password = st.text_input("Password", type="password")
     if st.button("Login"):
@@ -180,15 +215,16 @@ def doctor_login():
             st.session_state.user_name = data[1]
             st.rerun()
         else:
-            st.error("Invalid Practice Number or password.")
+            st.error("❌ Invalid Practice Number or password.")
 
 def patient_dashboard():
-    st.title(f"Welcome, {st.session_state.user_name}")
+    st.markdown(f'<div class="big-title">👋 Welcome, {st.session_state.user_name}</div>', unsafe_allow_html=True)
+    st.divider()
 
-    st.subheader("Book Appointment")
+    st.markdown('<div class="subtitle">🗓️ Book Appointment</div>', unsafe_allow_html=True)
     doctors = get_doctors()
     if not doctors:
-        st.warning("No doctors available.")
+        st.warning("⚠️ No doctors available.")
         return
 
     options = [f"{doc[0]} - Dr. {doc[1]} {doc[2]} ({doc[3]})" for doc in doctors]
@@ -205,11 +241,12 @@ def patient_dashboard():
                 (st.session_state.user_id, doc_id, dt.isoformat(), "Scheduled")
             )
             conn.commit()
-            st.success("Appointment booked!")
+            st.success("✅ Appointment booked!")
         except Exception as e:
             st.error(f"Error booking appointment: {e}")
 
-    st.subheader("My Appointments")
+    st.divider()
+    st.markdown('<div class="subtitle">📋 My Appointments</div>', unsafe_allow_html=True)
     c.execute('''
         SELECT a.time, d.first_name, d.surname 
         FROM appointments a
@@ -224,7 +261,8 @@ def patient_dashboard():
     else:
         st.write("No appointments yet.")
 
-    st.subheader("My Prescriptions")
+    st.divider()
+    st.markdown('<div class="subtitle">💊 My Prescriptions</div>', unsafe_allow_html=True)
     c.execute(
         "SELECT medication, prescribed_on, refill_due FROM prescriptions WHERE patient_id=? ORDER BY prescribed_on DESC",
         (st.session_state.user_id,)
@@ -237,7 +275,8 @@ def patient_dashboard():
         st.write("No prescriptions yet.")
 
 def doctor_dashboard():
-    st.title(f"Doctor Dashboard - Dr. {st.session_state.user_name}")
+    st.markdown(f'<div class="big-title">🩺 Doctor Dashboard - Dr. {st.session_state.user_name}</div>', unsafe_allow_html=True)
+    st.divider()
 
     c.execute('''
         SELECT a.id, p.id, p.full_name, a.time
@@ -249,37 +288,48 @@ def doctor_dashboard():
     appointments = c.fetchall()
     if not appointments:
         st.write("No appointments scheduled.")
-        return
+    else:
+        for appt in appointments:
+            appointment_id, patient_id, patient_name, appointment_time = appt
+            st.info(f"Patient: {patient_name} | Time: {appointment_time}")
 
-    for appt in appointments:
-        appointment_id, patient_id, patient_name, appointment_time = appt
-        st.info(f"Patient: {patient_name} | Time: {appointment_time}")
+            prescription_key = f"med_{appointment_id}"
+            medication = st.text_input(f"Prescription for {patient_name}", key=prescription_key)
 
-        prescription_key = f"med_{appointment_id}"
-        medication = st.text_input(f"Prescription for {patient_name}", key=prescription_key)
+            prescribe_button_key = f"btn_{appointment_id}"
+            if st.button("Prescribe", key=prescribe_button_key):
+                if not medication.strip():
+                    st.error("Please enter medication name before prescribing.")
+                    continue
+                today = datetime.now().date().isoformat()
+                refill_due = (datetime.now() + timedelta(days=30)).date().isoformat()
+                try:
+                    c.execute(
+                        "INSERT INTO prescriptions (patient_id, doctor_id, medication, prescribed_on, refill_due) VALUES (?, ?, ?, ?, ?)",
+                        (patient_id, st.session_state.user_id, medication.strip(), today, refill_due)
+                    )
+                    conn.commit()
+                    st.success(f"✅ Prescription for {patient_name} saved!")
+                except Exception as e:
+                    st.error(f"Error saving prescription: {e}")
 
-        prescribe_button_key = f"btn_{appointment_id}"
-        if st.button("Prescribe", key=prescribe_button_key):
-            if not medication.strip():
-                st.error("Please enter medication name before prescribing.")
-                continue
-            today = datetime.now().date().isoformat()
-            refill_due = (datetime.now() + timedelta(days=30)).date().isoformat()
+    st.divider()
+    st.subheader("⚠️ Danger Zone")
+    if st.button("Delete My Doctor Account"):
+        confirm = st.checkbox("Yes, I really want to delete my account permanently.")
+        if confirm:
             try:
-                c.execute(
-                    "INSERT INTO prescriptions (patient_id, doctor_id, medication, prescribed_on, refill_due) VALUES (?, ?, ?, ?, ?)",
-                    (patient_id, st.session_state.user_id, medication.strip(), today, refill_due)
-                )
+                c.execute("DELETE FROM doctors WHERE id=?", (st.session_state.user_id,))
                 conn.commit()
-                st.success(f"Prescription for {patient_name} saved!")
+                st.success("Your doctor account has been deleted.")
+                st.session_state.clear()
+                st.rerun()
             except Exception as e:
-                st.error(f"Error saving prescription: {e}")
+                st.error(f"Error deleting account: {e}")
 
 # =========================
 # MAIN
 # =========================
-st.set_page_config(page_title="KZN Health App", page_icon="🩺", layout="centered")
-
 menu = ["Home", "Register (Patient)", "Register (Doctor)", "Login (Patient)", "Login (Doctor)"]
 choice = st.sidebar.selectbox("Menu", menu)
 
@@ -293,8 +343,8 @@ if "user_role" not in st.session_state:
     elif choice == "Login (Doctor)":
         doctor_login()
     else:
-        st.title("Welcome to KZN Public Healthcare Queue App")
-        st.markdown("Use the sidebar to log in or register.")
+        st.markdown('<div class="big-title">🩺 The Health Line</div>', unsafe_allow_html=True)
+        st.markdown("Welcome to **The Health Line**. Use the sidebar to register or log in.")
 else:
     if st.session_state.user_role == "patient":
         patient_dashboard()
