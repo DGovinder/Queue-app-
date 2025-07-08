@@ -278,7 +278,7 @@ def doctor_dashboard():
 # =========================
 # MAIN
 # =========================
-st.set_page_config(page_title="KZN Health App", layout="centered")
+st.set_page_config(page_title="KZN Health App", page_icon="🩺", layout="centered")
 
 menu = ["Home", "Register (Patient)", "Register (Doctor)", "Login (Patient)", "Login (Doctor)"]
 choice = st.sidebar.selectbox("Menu", menu)
