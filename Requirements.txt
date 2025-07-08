@@ -1,2 +1,2 @@
-Database will be SQLite
-pip install streamlit sqlalchemy bcrypt
+streamlit
+bcrypt
