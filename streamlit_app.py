@@ -116,7 +116,11 @@ add_default_doctors()
 def register():
     st.header("Patient Registration")
     full_name = st.text_input("Full Name")
-    dob = st.date_input("Date of Birth")
+    dob = st.date_input(
+        "Date of Birth",
+        min_value=datetime(1910, 1, 1).date(),
+        max_value=datetime.today().date()
+    )
     id_number = st.text_input("ID Number")
     language = st.selectbox("Language", get_languages())
     password = st.text_input("Password", type="password")
@@ -152,7 +156,7 @@ def sign_in():
             st.session_state["patient_id"] = result[0]
             st.session_state["patient_name"] = result[2]
             st.success(f"Welcome {result[2]}!")
-            st.experimental_rerun()
+            st.rerun()
         else:
             st.error("Invalid ID number or password.")
 
@@ -208,7 +212,7 @@ def dashboard():
 
     if st.button("Logout"):
         st.session_state.clear()
-        st.experimental_rerun()
+        st.rerun()
 
 # ============================
 # MAIN
