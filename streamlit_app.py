@@ -1,5 +1,3 @@
-# streamlit_app.py
-
 import streamlit as st
 import sqlite3
 import hashlib
@@ -27,7 +25,10 @@ def create_tables():
     CREATE TABLE IF NOT EXISTS doctors (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         full_name TEXT,
-        specialization TEXT
+        surname TEXT,
+        place_of_work TEXT,
+        practice_number TEXT,
+        password_hash TEXT
     )
     ''')
 
@@ -88,7 +89,7 @@ def password_policy(password):
 
 def get_languages():
     return [
-        "English", "Afrikaans", "isiNdebele", "isiXhosa", "isiZulu", 
+        "English", "Afrikaans", "isiNdebele", "isiXhosa", "isiZulu",
         "Sepedi", "Sesotho", "Setswana", "siSwati", "Tshivenḓa", "Xitsonga"
     ]
 
@@ -96,24 +97,11 @@ def get_doctors():
     c.execute("SELECT * FROM doctors")
     return c.fetchall()
 
-def add_default_doctors():
-    c.execute("SELECT COUNT(*) FROM doctors")
-    if c.fetchone()[0] == 0:
-        c.execute("INSERT INTO doctors (full_name, specialization) VALUES (?, ?)", 
-                  ("Dr. John Khumalo", "General Practitioner"))
-        c.execute("INSERT INTO doctors (full_name, specialization) VALUES (?, ?)", 
-                  ("Dr. Mary Naidoo", "Family Doctor"))
-        c.execute("INSERT INTO doctors (full_name, specialization) VALUES (?, ?)", 
-                  ("Dr. Sipho Mthembu", "Pediatrician"))
-        conn.commit()
-
-add_default_doctors()
-
 # ============================
-# APP PAGES
+# PATIENT FUNCTIONS
 # ============================
 
-def register():
+def patient_register():
     st.header("Patient Registration")
     full_name = st.text_input("Full Name")
     dob = st.date_input(
@@ -125,7 +113,7 @@ def register():
     language = st.selectbox("Language", get_languages())
     password = st.text_input("Password", type="password")
 
-    if st.button("Register"):
+    if st.button("Register as Patient"):
         if not full_name or not id_number or not password:
             st.error("Please fill in all fields.")
             return
@@ -137,70 +125,67 @@ def register():
         c.execute('INSERT INTO patients (full_name, dob, id_number, language, password_hash) VALUES (?, ?, ?, ?, ?)',
                   (full_name, dob.isoformat(), id_number, language, password_hash))
         conn.commit()
-        st.success("Registration successful! Please sign in from the Home page.")
+        st.success("Patient registration successful! You can sign in from Home page.")
 
-def sign_in():
-    st.header("Sign In")
+def patient_sign_in():
+    st.header("Patient Sign In")
     id_number = st.text_input("ID Number")
     password = st.text_input("Password", type="password")
 
-    if st.button("Login"):
-        if not id_number or not password:
-            st.error("Please enter both ID and Password.")
-            return
-
+    if st.button("Login as Patient"):
         c.execute('SELECT id, password_hash, full_name FROM patients WHERE id_number=?', (id_number,))
         result = c.fetchone()
 
         if result and check_password(password, result[1]):
+            st.session_state["role"] = "patient"
             st.session_state["patient_id"] = result[0]
             st.session_state["patient_name"] = result[2]
             st.success(f"Welcome {result[2]}!")
             st.rerun()
         else:
-            st.error("Invalid ID number or password.")
+            st.error("Invalid credentials.")
 
-def dashboard():
-    st.header(f"Welcome, {st.session_state['patient_name']}!")
+def patient_dashboard():
+    st.header(f"Welcome, {st.session_state['patient_name']}")
+
+    st.subheader("Book Appointment")
+    doctors = get_doctors()
+    doctor_names = [f"{d[0]} - Dr. {d[1]} {d[2]}" for d in doctors]
+    doctor_choice = st.selectbox("Select Doctor", doctor_names)
+    date_choice = st.date_input("Appointment Date", min_value=datetime.today().date())
+    time_choice = st.time_input("Appointment Time", value=(datetime.now() + timedelta(hours=2)).time())
+
+    if st.button("Book Appointment"):
+        doctor_id = int(doctor_choice.split(" - ")[0])
+        appt_datetime = datetime.combine(date_choice, time_choice)
+        c.execute('INSERT INTO appointments (patient_id, doctor_id, time, status) VALUES (?, ?, ?, ?)',
+                  (st.session_state["patient_id"], doctor_id, appt_datetime.isoformat(), "Scheduled"))
+        conn.commit()
+        st.success("Appointment booked!")
+
     st.subheader("My Appointments")
     c.execute('''
-        SELECT a.id, d.full_name, a.time, a.status 
-        FROM appointments a 
-        JOIN doctors d ON a.doctor_id = d.id 
+        SELECT a.id, d.full_name, d.surname, a.time, a.status
+        FROM appointments a
+        JOIN doctors d ON a.doctor_id = d.id
         WHERE a.patient_id=?
     ''', (st.session_state["patient_id"],))
     rows = c.fetchall()
     if rows:
         for r in rows:
-            st.info(f"Doctor: {r[1]} | Time: {r[2]} | Status: {r[3]}")
+            st.info(f"Doctor: Dr. {r[1]} {r[2]} | Time: {r[3]} | Status: {r[4]}")
     else:
         st.write("No appointments yet.")
 
-    st.subheader("Book New Appointment")
-    doctors = get_doctors()
-    doctor_names = [f"{d[0]} - {d[1]}" for d in doctors]
-    doctor_choice = st.selectbox("Choose Doctor or Random", doctor_names + ["Random Doctor"])
-    if st.button("Get Available Slot and Book"):
-        slot_time = datetime.now() + timedelta(days=1, hours=2)
-        if doctor_choice == "Random Doctor":
-            doctor_id = doctors[0][0]
-        else:
-            doctor_id = int(doctor_choice.split(" - ")[0])
-
-        c.execute('INSERT INTO appointments (patient_id, doctor_id, time, status) VALUES (?, ?, ?, ?)',
-                  (st.session_state["patient_id"], doctor_id, slot_time.isoformat(), "Scheduled"))
-        conn.commit()
-        st.success("Appointment booked!")
-
-    st.subheader("My Prescribed Medications")
+    st.subheader("My Prescriptions")
     c.execute('SELECT medication, prescribed_on, refill_due FROM prescriptions WHERE patient_id=?',
               (st.session_state["patient_id"],))
     meds = c.fetchall()
     if meds:
         for m in meds:
-            st.info(f"Medication: {m[0]} | Prescribed on: {m[1]} | Refill due: {m[2]}")
+            st.info(f"Medication: {m[0]} | Prescribed: {m[1]} | Refill Due: {m[2]}")
     else:
-        st.write("No prescribed medications.")
+        st.write("No prescriptions.")
 
     st.subheader("Submit Complaint")
     complaint = st.text_area("Describe your complaint")
@@ -215,18 +200,101 @@ def dashboard():
         st.rerun()
 
 # ============================
+# DOCTOR FUNCTIONS
+# ============================
+
+def doctor_register():
+    st.header("Doctor Registration")
+    full_name = st.text_input("First Name")
+    surname = st.text_input("Surname")
+    place_of_work = st.text_input("Place of Work")
+    practice_number = st.text_input("13-digit Practice Number")
+    password = st.text_input("Password", type="password")
+
+    if st.button("Register as Doctor"):
+        if not full_name or not surname or not place_of_work or not practice_number or not password:
+            st.error("Please fill in all fields.")
+            return
+        if len(practice_number) != 13 or not practice_number.isdigit():
+            st.error("Practice Number must be 13 digits.")
+            return
+        if not password_policy(password):
+            st.error("Password must be at least 6 characters, include a number and a special character.")
+            return
+
+        password_hash = hash_password(password)
+        c.execute('INSERT INTO doctors (full_name, surname, place_of_work, practice_number, password_hash) VALUES (?, ?, ?, ?, ?)',
+                  (full_name, surname, place_of_work, practice_number, password_hash))
+        conn.commit()
+        st.success("Doctor registration successful!")
+
+def doctor_sign_in():
+    st.header("Doctor Sign In")
+    practice_number = st.text_input("Practice Number")
+    password = st.text_input("Password", type="password")
+
+    if st.button("Login as Doctor"):
+        c.execute('SELECT id, password_hash, full_name FROM doctors WHERE practice_number=?', (practice_number,))
+        result = c.fetchone()
+
+        if result and check_password(password, result[1]):
+            st.session_state["role"] = "doctor"
+            st.session_state["doctor_id"] = result[0]
+            st.session_state["doctor_name"] = result[2]
+            st.success(f"Welcome Dr. {result[2]}")
+            st.rerun()
+        else:
+            st.error("Invalid credentials.")
+
+def doctor_dashboard():
+    st.header(f"Doctor Dashboard - Dr. {st.session_state['doctor_name']}")
+
+    st.subheader("My Appointments")
+    c.execute('''
+        SELECT a.id, p.full_name, a.time, a.status 
+        FROM appointments a 
+        JOIN patients p ON a.patient_id = p.id
+        WHERE a.doctor_id=?
+    ''', (st.session_state["doctor_id"],))
+    rows = c.fetchall()
+    if rows:
+        for r in rows:
+            st.info(f"Patient: {r[1]} | Time: {r[2]} | Status: {r[3]}")
+            prescribe = st.text_input(f"Prescription for Appointment {r[0]}", key=f"rx_{r[0]}")
+            if st.button(f"Prescribe", key=f"btn_{r[0]}"):
+                refill_due = datetime.now() + timedelta(days=30)
+                c.execute('INSERT INTO prescriptions (patient_id, doctor_id, medication, prescribed_on, refill_due) VALUES (?, ?, ?, ?, ?)',
+                          (r[0], st.session_state["doctor_id"], prescribe, datetime.now().isoformat(), refill_due.isoformat()))
+                conn.commit()
+                st.success("Medication prescribed.")
+
+    else:
+        st.write("No appointments yet.")
+
+    if st.button("Logout"):
+        st.session_state.clear()
+        st.rerun()
+
+# ============================
 # MAIN
 # ============================
 st.set_page_config(page_title="KZN Healthcare Queue System", page_icon="💊")
 st.title("KZN Public Healthcare Queue Management App")
 
-menu = ["Home", "Register"]
+menu = ["Patient Login", "Patient Register", "Doctor Login", "Doctor Register"]
 choice = st.sidebar.selectbox("Navigation", menu)
 
-if "patient_id" not in st.session_state:
-    if choice == "Home":
-        sign_in()
-    elif choice == "Register":
-        register()
+if "role" not in st.session_state:
+    if choice == "Patient Login":
+        patient_sign_in()
+    elif choice == "Patient Register":
+        patient_register()
+    elif choice == "Doctor Login":
+        doctor_sign_in()
+    elif choice == "Doctor Register":
+        doctor_register()
 else:
-    dashboard()
+    if st.session_state["role"] == "patient":
+        patient_dashboard()
+    elif st.session_state["role"] == "doctor":
+        doctor_dashboard()
