@@ -2,7 +2,7 @@
 
 import streamlit as st
 import sqlite3
-import bcrypt
+import hashlib
 from datetime import datetime, timedelta
 
 # ============================
@@ -72,10 +72,10 @@ create_tables()
 SPECIAL_CHARS = r"!@#$%^&*()-_=+[{]}\\|;:'\",<.>/?`~"
 
 def hash_password(password):
-    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    return hashlib.sha256(password.encode()).hexdigest()
 
 def check_password(password, hashed):
-    return bcrypt.checkpw(password.encode(), hashed.encode())
+    return hashlib.sha256(password.encode()).hexdigest() == hashed
 
 def password_policy(password):
     if len(password) < 6:
