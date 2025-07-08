@@ -313,19 +313,23 @@ def doctor_dashboard():
                 except Exception as e:
                     st.error(f"Error saving prescription: {e}")
 
+    # === Danger Zone with FIXED delete workflow ===
     st.divider()
-    st.subheader("⚠️ Danger Zone")
-    if st.button("Delete My Doctor Account"):
-        confirm = st.checkbox("Yes, I really want to delete my account permanently.")
-        if confirm:
+    st.subheader("⚠️ Danger Zone - Delete Account")
+    confirm = st.checkbox("Yes, I really want to delete my account permanently.")
+
+    if confirm:
+        if st.button("Delete My Doctor Account"):
             try:
                 c.execute("DELETE FROM doctors WHERE id=?", (st.session_state.user_id,))
                 conn.commit()
-                st.success("Your doctor account has been deleted.")
+                st.success("Your doctor account has been deleted. Logging you out.")
                 st.session_state.clear()
                 st.rerun()
             except Exception as e:
                 st.error(f"Error deleting account: {e}")
+    else:
+        st.info("✅ Check the box above to confirm account deletion.")
 
 # =========================
 # MAIN
@@ -344,7 +348,7 @@ if "user_role" not in st.session_state:
         doctor_login()
     else:
         st.markdown('<div class="big-title">🩺 The Health Line</div>', unsafe_allow_html=True)
-        st.markdown("Welcome to **The Health Line**. Use the sidebar to register or log in.")
+        st.markdown("Welcome! Use the sidebar to register or log in.")
 else:
     if st.session_state.user_role == "patient":
         patient_dashboard()
