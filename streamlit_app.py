@@ -15,45 +15,50 @@ c = conn.cursor()
 def create_tables():
     c.execute('''CREATE TABLE IF NOT EXISTS patients (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        full_name TEXT,
-        dob TEXT,
-        id_number TEXT,
-        language TEXT,
-        password_hash TEXT
+        full_name TEXT NOT NULL,
+        dob TEXT NOT NULL,
+        id_number TEXT NOT NULL UNIQUE,
+        language TEXT NOT NULL,
+        password_hash TEXT NOT NULL
     )''')
 
     c.execute('''CREATE TABLE IF NOT EXISTS doctors (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        first_name TEXT,
-        surname TEXT,
-        place_of_work TEXT,
-        practice_number TEXT,
-        password_hash TEXT
+        first_name TEXT NOT NULL,
+        surname TEXT NOT NULL,
+        place_of_work TEXT NOT NULL,
+        practice_number TEXT NOT NULL UNIQUE,
+        password_hash TEXT NOT NULL
     )''')
 
     c.execute('''CREATE TABLE IF NOT EXISTS appointments (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        patient_id INTEGER,
-        doctor_id INTEGER,
-        time TEXT,
-        status TEXT
+        patient_id INTEGER NOT NULL,
+        doctor_id INTEGER NOT NULL,
+        time TEXT NOT NULL,
+        status TEXT NOT NULL,
+        FOREIGN KEY(patient_id) REFERENCES patients(id),
+        FOREIGN KEY(doctor_id) REFERENCES doctors(id)
     )''')
 
     c.execute('''CREATE TABLE IF NOT EXISTS prescriptions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        patient_id INTEGER,
-        doctor_id INTEGER,
-        medication TEXT,
-        prescribed_on TEXT,
-        refill_due TEXT
+        patient_id INTEGER NOT NULL,
+        doctor_id INTEGER NOT NULL,
+        medication TEXT NOT NULL,
+        prescribed_on TEXT NOT NULL,
+        refill_due TEXT NOT NULL,
+        FOREIGN KEY(patient_id) REFERENCES patients(id),
+        FOREIGN KEY(doctor_id) REFERENCES doctors(id)
     )''')
 
     c.execute('''CREATE TABLE IF NOT EXISTS complaints (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        patient_id INTEGER,
-        content TEXT,
-        submitted_on TEXT,
-        status TEXT
+        patient_id INTEGER NOT NULL,
+        content TEXT NOT NULL,
+        submitted_on TEXT NOT NULL,
+        status TEXT NOT NULL,
+        FOREIGN KEY(patient_id) REFERENCES patients(id)
     )''')
     conn.commit()
 
@@ -96,21 +101,35 @@ def patient_register():
     password = st.text_input("Password", type="password")
 
     if st.button("Register"):
+        if not name.strip():
+            st.error("Full Name cannot be empty.")
+            return
+        if not id_number.strip():
+            st.error("ID Number cannot be empty.")
+            return
         if not password_policy(password):
             st.error("Password must have at least 6 characters, a number and a special character.")
-        else:
-            hashed = hash_password(password)
+            return
+        hashed = hash_password(password)
+        try:
             c.execute("INSERT INTO patients (full_name, dob, id_number, language, password_hash) VALUES (?, ?, ?, ?, ?)",
-                      (name, dob.isoformat(), id_number, language, hashed))
+                      (name.strip(), dob.isoformat(), id_number.strip(), language, hashed))
             conn.commit()
             st.success("Patient registered successfully!")
+        except sqlite3.IntegrityError:
+            st.error("ID Number already registered. Please log in or use a different ID.")
+        except Exception as e:
+            st.error(f"Unexpected error: {e}")
 
 def patient_login():
     st.title("Patient Login")
     id_number = st.text_input("ID Number")
     password = st.text_input("Password", type="password")
     if st.button("Login"):
-        c.execute("SELECT id, full_name, password_hash FROM patients WHERE id_number=?", (id_number,))
+        if not id_number.strip():
+            st.error("Please enter your ID Number.")
+            return
+        c.execute("SELECT id, full_name, password_hash FROM patients WHERE id_number=?", (id_number.strip(),))
         data = c.fetchone()
         if data and check_password(password, data[2]):
             st.session_state.user_role = "patient"
@@ -129,23 +148,41 @@ def doctor_register():
     password = st.text_input("Password", type="password")
 
     if st.button("Register"):
-        if len(practice) != 13 or not practice.isdigit():
-            st.error("Practice number must be 13 digits.")
-        elif not password_policy(password):
+        if not first_name.strip():
+            st.error("First Name cannot be empty.")
+            return
+        if not surname.strip():
+            st.error("Surname cannot be empty.")
+            return
+        if not work.strip():
+            st.error("Place of Work cannot be empty.")
+            return
+        if len(practice.strip()) != 13 or not practice.strip().isdigit():
+            st.error("Practice number must be exactly 13 digits.")
+            return
+        if not password_policy(password):
             st.error("Password must have at least 6 characters, a number and a special character.")
-        else:
-            hashed = hash_password(password)
+            return
+        hashed = hash_password(password)
+        try:
             c.execute("INSERT INTO doctors (first_name, surname, place_of_work, practice_number, password_hash) VALUES (?, ?, ?, ?, ?)",
-                      (first_name, surname, work, practice, hashed))
+                      (first_name.strip(), surname.strip(), work.strip(), practice.strip(), hashed))
             conn.commit()
             st.success("Doctor registered successfully!")
+        except sqlite3.IntegrityError:
+            st.error("Practice Number already registered. Please log in or use a different number.")
+        except Exception as e:
+            st.error(f"Unexpected error: {e}")
 
 def doctor_login():
     st.title("Doctor Login")
     practice = st.text_input("Practice Number")
     password = st.text_input("Password", type="password")
     if st.button("Login"):
-        c.execute("SELECT id, first_name, password_hash FROM doctors WHERE practice_number=?", (practice,))
+        if not practice.strip():
+            st.error("Please enter your Practice Number.")
+            return
+        c.execute("SELECT id, first_name, password_hash FROM doctors WHERE practice_number=?", (practice.strip(),))
         data = c.fetchone()
         if data and check_password(password, data[2]):
             st.session_state.user_role = "doctor"
@@ -160,6 +197,10 @@ def patient_dashboard():
 
     st.subheader("Book Appointment")
     doctors = get_doctors()
+    if not doctors:
+        st.warning("No doctors available at the moment.")
+        return
+
     options = [f"{doc[0]} - Dr. {doc[1]} {doc[2]} ({doc[3]})" for doc in doctors]
     doctor = st.selectbox("Choose Doctor", options)
     date = st.date_input("Date", min_value=datetime.today().date())
@@ -168,39 +209,69 @@ def patient_dashboard():
 
     if st.button("Book"):
         doc_id = int(doctor.split(" - ")[0])
-        c.execute("INSERT INTO appointments (patient_id, doctor_id, time, status) VALUES (?, ?, ?, ?)",
-                  (st.session_state.user_id, doc_id, dt.isoformat(), "Scheduled"))
-        conn.commit()
-        st.success("Appointment booked!")
+        try:
+            c.execute("INSERT INTO appointments (patient_id, doctor_id, time, status) VALUES (?, ?, ?, ?)",
+                      (st.session_state.user_id, doc_id, dt.isoformat(), "Scheduled"))
+            conn.commit()
+            st.success("Appointment booked!")
+        except Exception as e:
+            st.error(f"Could not book appointment: {e}")
 
     st.subheader("My Appointments")
     c.execute('''SELECT a.time, d.first_name, d.surname FROM appointments a 
-                 JOIN doctors d ON a.doctor_id = d.id WHERE a.patient_id=?''',
+                 JOIN doctors d ON a.doctor_id = d.id WHERE a.patient_id=? ORDER BY a.time DESC''',
               (st.session_state.user_id,))
-    for row in c.fetchall():
-        st.info(f"Doctor: Dr. {row[1]} {row[2]} | Time: {row[0]}")
+    appointments = c.fetchall()
+    if appointments:
+        for row in appointments:
+            st.info(f"Doctor: Dr. {row[1]} {row[2]} | Time: {row[0]}")
+    else:
+        st.write("No appointments booked yet.")
 
     st.subheader("My Prescriptions")
-    c.execute("SELECT medication, prescribed_on, refill_due FROM prescriptions WHERE patient_id=?", (st.session_state.user_id,))
-    for med in c.fetchall():
-        st.success(f"{med[0]} | Prescribed: {med[1]} | Refill Due: {med[2]}")
+    c.execute("SELECT medication, prescribed_on, refill_due FROM prescriptions WHERE patient_id=? ORDER BY prescribed_on DESC", (st.session_state.user_id,))
+    prescriptions = c.fetchall()
+    if prescriptions:
+        for med in prescriptions:
+            st.success(f"{med[0]} | Prescribed: {med[1]} | Refill Due: {med[2]}")
+    else:
+        st.write("No prescriptions yet.")
 
 def doctor_dashboard():
     st.title(f"Doctor Dashboard - Dr. {st.session_state.user_name}")
 
-    c.execute('''SELECT a.id, p.full_name, a.time FROM appointments a 
-                 JOIN patients p ON a.patient_id = p.id WHERE a.doctor_id=?''',
+    c.execute('''SELECT a.id, p.id, p.full_name, a.time FROM appointments a 
+                 JOIN patients p ON a.patient_id = p.id WHERE a.doctor_id=? ORDER BY a.time DESC''',
               (st.session_state.user_id,))
-    for row in c.fetchall():
-        st.info(f"Patient: {row[1]} | Time: {row[2]}")
-        med = st.text_input(f"Prescription for {row[1]} at {row[2]}", key=f"med_{row[0]}")
-        if st.button("Prescribe", key=f"btn_{row[0]}"):
+    appointments = c.fetchall()
+    if not appointments:
+        st.write("No appointments scheduled.")
+        return
+
+    for row in appointments:
+        appointment_id = row[0]
+        patient_id = row[1]
+        patient_name = row[2]
+        appointment_time = row[3]
+
+        st.info(f"Patient: {patient_name} | Time: {appointment_time}")
+        med_key = f"med_{appointment_id}"
+        med = st.text_input(f"Prescription for {patient_name} at {appointment_time}", key=med_key)
+
+        presc_btn_key = f"btn_{appointment_id}"
+        if st.button("Prescribe", key=presc_btn_key):
+            if not med.strip():
+                st.error("Please enter medication name before prescribing.")
+                continue
             today = datetime.now().date().isoformat()
             refill = (datetime.now() + timedelta(days=30)).date().isoformat()
-            c.execute("INSERT INTO prescriptions (patient_id, doctor_id, medication, prescribed_on, refill_due) VALUES (?, ?, ?, ?, ?)",
-                      (row[0], st.session_state.user_id, med, today, refill))
-            conn.commit()
-            st.success("Medication prescribed.")
+            try:
+                c.execute("INSERT INTO prescriptions (patient_id, doctor_id, medication, prescribed_on, refill_due) VALUES (?, ?, ?, ?, ?)",
+                          (patient_id, st.session_state.user_id, med.strip(), today, refill))
+                conn.commit()
+                st.success("Medication prescribed.")
+            except Exception as e:
+                st.error(f"Error prescribing medication: {e}")
 
 # =========================
 # MAIN
